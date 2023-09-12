@@ -1,72 +1,159 @@
-## ----loaddata------------------------------------------------------------
-unzip(zipfile="activity.zip")
-data <- read.csv("activity.csv")
+---
+title: "Coursera Project 1"
+output: html_document
+date: "2023-07-03"
+---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## ------------------------------------------------------------------------
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, fig.width = 10, fig.height = 5,
+                      fig.keep = 'all' ,fig.path = 'figures\ ', dev = 'png')
+                      
 library(ggplot2)
-total.steps <- tapply(data$steps, data$date, FUN=sum, na.rm=TRUE)
-qplot(total.steps, binwidth=1000, xlab="total number of steps taken each day")
-mean(total.steps, na.rm=TRUE)
-median(total.steps, na.rm=TRUE)
+library(ggthemes)
 
+# Unzipping the file and reading it
+path = getwd()
+unzip("repdata_data_activity.zip", exdir = path)
 
-## ------------------------------------------------------------------------
-library(ggplot2)
-averages <- aggregate(x=list(steps=data$steps), by=list(interval=data$interval),
-                      FUN=mean, na.rm=TRUE)
-ggplot(data=averages, aes(x=interval, y=steps)) +
-    geom_line() +
-    xlab("5-minute interval") +
-    ylab("average number of steps taken")
+activity <- read.csv("activity.csv")
 
+# Setting date format to help get the weekdays of the dates
+activity$date <- as.POSIXct(activity$date, "%Y%m%d")
 
-## ------------------------------------------------------------------------
-averages[which.max(averages$steps),]
+# Getting the days of all the dates on the dataset
+day <- weekdays(activity$date)
 
+# Combining the dataset with the weekday of the dates
+activity <- cbind(activity, day)
 
-## ----how_many_missing Value----------------------------------------------------
-missing <- is.na(data$steps)
-# How many missing
-table(missing)
+# Viewing the processed data
+summary(activity)
 
+#QUESTION1!!!
+# Calculating total steps taken on a day
+activityTotalSteps <- with(activity, aggregate(steps, by = list(date), sum, na.rm = TRUE))
+# Changing col names
+names(activityTotalSteps) <- c("Date", "Steps")
 
-## ------------------------------------------------------------------------
-# Replace each missing value with the mean value of its 5-minute interval
-fill.value <- function(steps, interval) {
-    filled <- NA
-    if (!is.na(steps))
-        filled <- c(steps)
-    else
-        filled <- (averages[averages$interval==interval, "steps"])
-    return(filled)
-}
-filled.data <- data
-filled.data$steps <- mapply(fill.value, filled.data$steps, filled.data$interval)
+# Converting the data set into a data frame to be able to use ggplot2
+totalStepsdf <- data.frame(activityTotalSteps)
 
+# Plotting a histogram using ggplot2
+g <- ggplot(totalStepsdf, aes(x = Steps)) + 
+  geom_histogram(breaks = seq(0, 25000, by = 2500), fill = "#83CAFF", col = "black") + 
+  ylim(0, 30) + 
+  xlab("Total Steps Taken Per Day") + 
+  ylab("Frequency") + 
+  ggtitle("Total Number of Steps Taken on a Day") + 
+  theme_calc(base_family = "serif")
 
-## ------------------------------------------------------------------------
-total.steps <- tapply(filled.data$steps, filled.data$date, FUN=sum)
-qplot(total.steps, binwidth=1000, xlab="total number of steps taken each day")
-mean(total.steps)
-median(total.steps)
+print(g)                      
 
+mean(activityTotalSteps$Steps)
 
-## ------------------------------------------------------------------------
-weekday.or.weekend <- function(date) {
-    day <- weekdays(date)
-    if (day %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"))
-        return("weekday")
-    else if (day %in% c("Saturday", "Sunday"))
-        return("weekend")
-    else
-        stop("invalid date")
-}
-filled.data$date <- as.Date(filled.data$date)
-filled.data$day <- sapply(filled.data$date, FUN=weekday.or.weekend)
+median(activityTotalSteps$Steps)
 
+#QUESTION2!!!
+# Calculating the average number of steps taken, averaged across all days by 5-min intervals.
+averageDailyActivity <- aggregate(activity$steps, by = list(activity$interval), 
+                                  FUN = mean, na.rm = TRUE)
+# Changing col names
+names(averageDailyActivity) <- c("Interval", "Mean")
 
-## ------------------------------------------------------------------------
-averages <- aggregate(steps ~ interval + day, data=filled.data, mean)
-ggplot(averages, aes(interval, steps)) + geom_line() + facet_grid(day ~ .) +
-    xlab("5-minute interval") + ylab("Number of steps")
+# Converting the data set into a dataframe
+averageActivitydf <- data.frame(averageDailyActivity)
+
+# Plotting on ggplot2
+da <- ggplot(averageActivitydf, mapping = aes(Interval, Mean)) + 
+  geom_line(col = "blue") +
+  xlab("Interval") + 
+  ylab("Average Number of Steps") + 
+  ggtitle("Average Number of Steps Per Interval") +
+  theme_calc(base_family = "serif")
+  
+print(da)
+
+#QUESTION3!!!
+sum(is.na(activity$steps))
+# Matching the mean of daily activity with the missing values
+imputedSteps <- averageDailyActivity$Mean[match(activity$interval, averageDailyActivity$Interval)]
+
+# Transforming steps in activity if they were missing values with the filled values from above.
+activityImputed <- transform(activity, 
+                             steps = ifelse(is.na(activity$steps), yes = imputedSteps, no = activity$steps))
+
+# Forming the new dataset with the imputed missing values.
+totalActivityImputed <- aggregate(steps ~ date, activityImputed, sum)
+
+# Changing col names
+names(totalActivityImputed) <- c("date", "dailySteps")
+
+sum(is.na(totalActivityImputed$dailySteps))
+
+# Converting the data set into a data frame to be able to use ggplot2
+totalImputedStepsdf <- data.frame(totalActivityImputed)
+
+# Plotting a histogram using ggplot2
+p <- ggplot(totalImputedStepsdf, aes(x = dailySteps)) + 
+  geom_histogram(breaks = seq(0, 25000, by = 2500), fill = "#83CAFF", col = "black") + 
+  ylim(0, 30) + 
+  xlab("Total Steps Taken Per Day") + 
+  ylab("Frequency") + 
+  ggtitle("Total Number of Steps Taken on a Day") + 
+  theme_calc(base_family = "serif")
+
+print(p)
+
+mean(totalActivityImputed$dailySteps)
+
+median(totalActivityImputed$dailySteps)
+
+#QUESTION4!!!
+
+# Updating format of the dates
+activity$date <- as.Date(strptime(activity$date, format="%Y-%m-%d"))
+
+# Creating a function that distinguises weekdays from weekends
+activity$dayType <- sapply(activity$date, function(x) {
+  if(weekdays(x) == "Saturday" | weekdays(x) == "Sunday")
+  {y <- "Weekend"}
+  else {y <- "Weekday"}
+  y
+})
+
+# Creating the data set that will be plotted
+activityByDay <-  aggregate(steps ~ interval + dayType, activity, mean, na.rm = TRUE)
+
+# Plotting using ggplot2
+dayPlot <-  ggplot(activityByDay, aes(x = interval , y = steps, color = dayType)) + 
+  geom_line() + ggtitle("Average Daily Steps by Day Type") + 
+  xlab("Interval") + 
+  ylab("Average Number of Steps") +
+  facet_wrap(~dayType, ncol = 1, nrow=2) +
+  scale_color_discrete(name = "Day Type") +
+  theme_calc(base_family = "serif")
+
+print(dayPlot) 
